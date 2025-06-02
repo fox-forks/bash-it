@@ -73,89 +73,85 @@ function bash-it() {
 	example '$ bash-it restart'
 	example '$ bash-it profile list|save|load|rm [profile_name]'
 	example '$ bash-it doctor errors|warnings|all'
-	local verb=${1:-}
-	shift
-	local component=${1:-}
-	shift
-	local func
 
+	local verb=${1:-}
+	if [[ -z $verb ]]; then
+		reference  "bash-it"
+		return
+	fi
+	shift
+
+	local component=${1:-}
+	if [[ -n $component ]]; then
+		shift
+	fi
+
+	local func
 	case "$verb" in
 		show)
-			func="_bash-it-$component"
+			func=$(_find-function "_bash-it-$component")
+			"$func" "$@"
 			;;
-		enable)
-			func="_enable-$component"
-			;;
-		disable)
-			func="_disable-$component"
+		enable|disable)
+			if [[ $verb == enable ]]; then
+				func=$(_find-function "_enable-$component")
+			elif [[ $verb == disable ]]; then
+				func=$(_find-function "_disable-$component")
+			fi
+
+			# Automatically run a migration if required
+			_bash-it-migrate
+
+			for arg in "$@"; do
+				"$func" "$arg"
+			done
+
+			if [[ -n "${BASH_IT_AUTOMATIC_RELOAD_AFTER_CONFIG_CHANGE:-}" ]]; then
+				_bash-it-reload
+			fi
 			;;
 		help)
-			func="_help-$component"
+			func=$(_find-function "_help-$component")
+			"$func" "$@"
 			;;
 		doctor)
-			func="_bash-it-doctor-$component"
+			func=$(_find-function "_bash-it-doctor-$component")
+			"$func" "$@"
 			;;
 		profile)
-			func=_bash-it-profile-$component
+			func=$(_find-function "_bash-it-profile-$component")
+			"$func" "$@"
 			;;
 		search)
 			_bash-it-search "$component" "$@"
-			return
 			;;
 		preview)
 			_bash-it-preview "$component" "$@"
-			return
 			;;
 		update)
-			func="_bash-it-update-$component"
+			func=$(_find-function "_bash-it-update-$component")
+			"$func" "$@"
 			;;
 		migrate)
-			func="_bash-it-migrate"
+			func=$(_find-function "_bash-it-migrate")
+			"$func" "$@"
 			;;
 		version)
-			func="_bash-it-version"
+			func=$(_find-function "_bash-it-version")
+			"$func" "$@"
 			;;
 		restart)
-			func="_bash-it-restart"
+			func=$(_find-function "_bash-it-restart")
+			"$func" "$@"
 			;;
 		reload)
-			func="_bash-it-reload"
+			func=$(_find-function "_bash-it-reload")
+			"$func" "$@"
 			;;
 		*)
 			reference "bash-it"
-			return
 			;;
 	esac
-
-	# pluralize component if necessary
-	if ! _is_function "$func"; then
-		if _is_function "${func}s"; then
-			func="${func}s"
-		else
-			if _is_function "${func}es"; then
-				func="${func}es"
-			else
-				echo "oops! $component is not a valid option!"
-				reference bash-it
-				return
-			fi
-		fi
-	fi
-
-	if [[ "$verb" == "enable" || "$verb" == "disable" ]]; then
-		# Automatically run a migration if required
-		_bash-it-migrate
-
-		for arg in "$@"; do
-			"$func" "$arg"
-		done
-
-		if [[ -n "${BASH_IT_AUTOMATIC_RELOAD_AFTER_CONFIG_CHANGE:-}" ]]; then
-			_bash-it-reload
-		fi
-	else
-		"$func" "$@"
-	fi
 }
 
 function _bash-it-aliases() {
@@ -631,6 +627,28 @@ function _bash-it-describe() {
 	printf '%s\n' "$ bash-it enable $file_type  <$file_type name> [$file_type name]... -or- $ bash-it enable $file_type all"
 	printf '\n%s\n' "to disable $preposition $file_type, do:"
 	printf '%s\n' "$ bash-it disable $file_type <$file_type name> [$file_type name]... -or- $ bash-it disable $file_type all"
+}
+
+function _find-function() {
+	local func=${1}
+
+	if [ -z "$func" ]; then
+		echo "Oops! No valid option was supplied" >&2
+		reference bash-it >&2
+		exit 1
+	fi
+
+	if _is_function "${func}"; then
+		echo "${func}"
+	elif _is_function "${func}s"; then
+		echo "${func}s"
+	elif _is_function "${func}es"; then
+		echo "${func}es"
+	else
+		echo "Oops! $component is not a valid option!" >&2
+		reference bash-it >&2
+		exit 1
+	fi
 }
 
 function _on-disable-callback() {
